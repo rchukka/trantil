@@ -1,0 +1,75 @@
+<project name="trantil" default="dist" basedir=".">
+	<description>
+		Builds trantil jar file.
+	</description>
+	<!-- set global properties for this build -->
+	<property name="src" location="src" />
+	<property name="build" location="build" />
+	<property name="dist" location="../dist" />
+	<property file="local.properties" />
+	<!-- Don't change androidjar here, change your local.properties or set androidjar through command line or build tool -->
+	<property name="androidjar" value="C:/Program Files (x86)/Android/android-sdk/platforms/android-8/android.jar"/>
+
+	<target name="init">
+		<!-- Create the time stamp -->
+		<tstamp>
+			<format property="current.time" pattern="MMM dd yyyy H:mm:ss Z" />
+		</tstamp>
+		<!-- Create the build directory structure used by compile -->
+		<mkdir dir="${build}" />
+	</target>
+
+	<target name="compile" depends="init" description="compile the source ">
+        <echo
+            message="Including support lib ${androidsupportv4}" />
+		<!-- Compile the java code from ${src} into ${build} -->
+		<javac srcdir="${src}" destdir="${build}" includeantruntime="false">
+			<classpath>
+				<pathelement location="lib/" />
+				<pathelement path="${java.class.path}/" />
+				<pathelement path="${androidjar}" />
+				<pathelement path="${androidsupportv4}" />
+			</classpath>
+		</javac>
+	</target>
+
+	<target name="dist" depends="clean,compile" description="generate the distribution">
+		<!-- Create the distribution directory -->
+		<mkdir dir="${dist}" />
+
+		<loadfile property="versionfile"
+			srcfile="${src}/com/rchukka/trantil/common/Util.java" />
+		<!-- Requires ant-contrib package, ant-contrib-1.0b3.jar. -->
+		<!-- http://sourceforge.net/projects/ant-contrib/files/ant-contrib/1.0b3/ -->
+		<!-- Put ant-contrib-1.0b3.jar in ANT_HOME/libs folder -->
+		<!-- If you get error in eclipse, then you have to change ANT_HOME directory 
+			*inside* eclipse -->
+		<taskdef resource="net/sf/antcontrib/antcontrib.properties" />
+		<!-- Detect version by regex VERSION[ \t]*\=[ \t]\"([A-Z0-9\.]*)\"\; -->
+		<!-- Generally public static final String VERSION = "x.x.x"; -->
+		<propertyregex property="libversion" override="true"
+			input="${versionfile}" regexp="VERSION[ \t]*\=[ \t]\&#34;([A-Z0-9\.]*)\&#34;\;"
+			select="\1" />
+		
+		<fail unless="libversion" message="Unable to detect version in ${versionfile}"/>
+
+		<echo
+			message="Detected ${ant.project.name} version ${libversion} in ${versionfile}" />
+
+		<!-- Put everything in ${build} into the MyProject-${DSTAMP}.jar file -->
+		<jar jarfile="${dist}/trantil-${libversion}.jar" basedir="${build}" excludes="**/Test*.class">
+			<manifest>
+				<attribute name="Built-By" value="rchukka" />
+				<attribute name="Library-Version" value="${libversion}" />
+				<attribute name="Build-Date" value="${current.time}" />
+				<attribute name="Sealed" value="true" />
+			</manifest>
+		</jar>
+	</target>
+
+	<target name="clean" description="clean up">
+		<!-- Delete the ${build} and ${dist} directory trees -->
+		<delete dir="${build}" />
+		<delete dir="${dist}" />
+	</target>
+</project>

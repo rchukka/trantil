@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<response>
+    <category>
+        <catid>1</catid>
+        <product name="shoes">
+            <prdid>100</prdid>
+            <price>89.99</price>
+            <vendor>puma</vendor>
+        </product>
+        <product name="socks">
+            <prdid>101</prdid>
+            <price>4.49</price>
+            <vendor>puma</vendor>
+        </product>
+    </category>
+    <category>
+        <catid>2</catid>
+        <product name="cereal">
+            <prdid>200</prdid>
+            <price>2.89</price>
+            <vendor>killog</vendor>
+        </product>
+    </category>
+</response>

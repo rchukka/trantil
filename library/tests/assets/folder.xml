@@ -1,0 +1,13 @@
+<response>
+    <folder name="firstfolder" desc="first folder desc">
+        <file name="file1.txt" owner="user1"/>
+        <file name="file2.txt" owner="user2"/>
+        <file name="file3.txt" owner="user3"/>
+        <file name="file4.txt" owner="user1"/>        
+    </folder>  
+    <folder name="secondfolder">
+        <file name="file5.txt" owner="user1"/>
+        <file name="file6.txt" owner="user3"/>
+        <file name="file7.txt" owner="user7"/>
+    </folder>  
+</response>
