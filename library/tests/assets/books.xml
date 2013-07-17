@@ -4,6 +4,8 @@
         <errorcode critical="false">0</errorcode>
         <errormsg>No Error</errormsg>
     </status>
-    <book bookid="1" name="Title One" author="John Doe" pubDate="10Jan2003" desc="Title One Description"/>
+    <book bookid="1" name="Title One" author="John Doe" pubDate="10Jan2003" desc="Title One Description">
+        <comment userid="3434" title="Comment Title" content="Great Book">Is this a good book?.</comment>    
+    </book>
     <book bookid="2" name="Title Two" author="Johny Doe" pubDate="12Jan2003" desc="Title Two Description"/>  
 </response>

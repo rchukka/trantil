@@ -9,6 +9,4 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ColumnInt {
     boolean isKey() default false;
-
-    String name() default "";
 }

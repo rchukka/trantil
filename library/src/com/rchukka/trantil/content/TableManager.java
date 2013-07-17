@@ -292,19 +292,6 @@ class TableManager {
 
     private String getColumnName(Field field) {
         String colName = field.getName();
-
-        Column cField = field.getAnnotation(Column.class);
-        if (cField != null && cField.name().length() > 0)
-            colName = cField.name();
-
-        ColumnInt ciField = field.getAnnotation(ColumnInt.class);
-        if (ciField != null && ciField.name().length() > 0)
-            colName = ciField.name();
-
-        ColumnReal crField = field.getAnnotation(ColumnReal.class);
-        if (crField != null && crField.name().length() > 0)
-            colName = crField.name();
-
         return colName;
     }
 

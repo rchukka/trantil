@@ -1,10 +1,20 @@
 package com.rchukka.trantil.common;
 
 import android.content.ContentValues;
+import android.util.Log;
+import android.util.Xml;
+
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
 
+import com.rchukka.trantil.content.type.Column;
+import com.rchukka.trantil.content.type.DataType;
+import com.rchukka.trantil.content.type.Table;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -51,8 +61,59 @@ public class XmlToCVHandler extends DefaultHandler {
     private String          mCurrentPath = "";
     private Node            mCurrentNode = new Node();
 
+    public static List<ContentValues> parse(InputStream stream, Class klass) throws IOException, SAXException{
+        XmlToCVHandler handler = new XmlToCVHandler();
+        XmlToCVHandler.Collector col = handler.addCollector(klass);
+        Xml.parse(stream, Xml.Encoding.UTF_8, handler);
+        stream.close();
+        return col.getData();
+    }
+    
+    public void parse(InputStream stream) throws IOException, SAXException{
+        Xml.parse(stream, Xml.Encoding.UTF_8, this);
+        stream.close();
+    }
+    
     public Collector addCollector(String path) {
         Collector col = new Collector(path);
+        mCollectors.add(col);
+        return col;
+    }
+
+    @SuppressWarnings("unchecked")
+    public Collector addCollector(Class klass) {
+        String xPath = null;
+        XPath xpa = (XPath) klass.getAnnotation(XPath.class);
+        if (xpa != null) xPath = xpa.path();
+
+        if (xPath == null) {
+            Table txpa = (Table) klass.getAnnotation(Table.class);
+            if (txpa != null) xPath = txpa.xPath();
+        }
+
+        if (xPath == null || xPath.length() == 0)
+            throw new DataType.DataTypeException("Invalid class. "
+                    + klass.getName()
+                    + " is missing xpath as part of annotation.");
+
+        Collector col = new Collector(xPath);
+
+        for (Field field : klass.getDeclaredFields()) {
+            String xNode = null;
+            XNode xfa = field.getAnnotation(XNode.class);
+            if (xfa != null) xNode = xfa.name();
+
+            if (xNode == null) {
+                Column cfa = field.getAnnotation(Column.class);
+                if (cfa != null) xNode = cfa.xNode();
+            }
+
+            if (xNode == null || xNode.length() == 0)
+                xNode = field.getName();
+            
+            col.collect(xNode + ":" + field.getName());
+        }
+
         mCollectors.add(col);
         return col;
     }
@@ -70,7 +131,8 @@ public class XmlToCVHandler extends DefaultHandler {
 
         mCurrentNode.mPath = mCurrentPath + "/" + localName;
         for (Collector col : mCollectors)
-            col.processElement(mCurrentPath, localName, null, atts);
+            col.processElement(true, mCurrentNode.mPath, mCurrentPath,
+                    localName, null, atts);
         mCurrentPath = mCurrentNode.mPath;
     }
 
@@ -84,7 +146,8 @@ public class XmlToCVHandler extends DefaultHandler {
             throws SAXException {
         mCurrentPath = mCurrentPath.substring(0, mCurrentPath.lastIndexOf("/"));
         for (Collector col : mCollectors)
-            col.processElement(mCurrentPath, localName, mBuff.toString(), null);
+            col.processElement(false, mCurrentNode.mPath, mCurrentPath,
+                    localName, mBuff.toString(), null);
         mCurrentNode = mCurrentNode.mParent;
     }
 
@@ -96,7 +159,8 @@ public class XmlToCVHandler extends DefaultHandler {
         private HashMap<String, List<Attrib>> mParseAttr;
 
         Collector(String nodePath) {
-            mCollectorPath = nodePath;
+            mCollectorPath = nodePath.endsWith("/") ? nodePath.substring(0,
+                    nodePath.length() - 1) : nodePath;
             mContents = new ArrayList<ContentValues>(10);
             mParseEl = new HashMap<String, String>(3);
             mParseAttr = new HashMap<String, List<Attrib>>(5);
@@ -106,122 +170,123 @@ public class XmlToCVHandler extends DefaultHandler {
             return mContents;
         }
 
-        public Collector collect(String elements) {
-            String[] splitCol = elements.split(",");
-            for (String attProp : splitCol) {
-                String[] split = attProp.split(":");
-                mParseEl.put(split[0], split.length > 1 ? split[1] : split[0]);
-            }
-
-            return this;
-        }
-
         /**
-         * Collects node inner text value
-         * 
-         * @param elementName
-         *            Xml element/node name
-         * @param collectElAs
-         *            Collect element as
-         * @return
-         */
-        public Collector collect(String elementName, String collectElAs) {
-            mParseEl.put(elementName, collectElAs);
-            return this;
-        }
-
-        /**
-         * Collect atttributes from @param elementName node. The value after :
+         * Collect atttributes from @param nodeName node. The value after :
          * denotes the key to be used in contentvalue to save it's value. neat
          * ah?. ya.
          * 
          * <pre>
          * addCollector("/path").
-         *  .collectAttributes("attr1", "attr2:prdId,attr3:price,desc:desc");
+         *  .collect("@attr2:prdId,@attr3:price,@desc:desc");
          * </pre>
          * 
-         * @param elementName
-         * @param collectAttrAs
+         * @param nodeattributes
          * @return
          */
-        public Collector collectAttributes(String elementName,
-                String attrName_collectAttrAs) {
-            // blow away spaces
-            attrName_collectAttrAs = attrName_collectAttrAs.replace(" ", "");
-            String[] splitCol = attrName_collectAttrAs.split(",");
-            return collectAttributes(elementName, splitCol);
+        public Collector collect(String nodeattributes) {
+            return collect("", nodeattributes);
         }
 
-        private Collector collectAttributes(String elementName,
-                String[] attrName_collectAttrAs) {
-            for (String attProp : attrName_collectAttrAs) {
+        /**
+         * Collect atttributes from @param nodeName node. The value after :
+         * denotes the key to be used in contentvalue to save it's value. neat
+         * ah?. ya.
+         * 
+         * <pre>
+         * addCollector("/path").
+         *  .collect("nodename", "@attr2:prdId,@attr3:price,@desc:desc");
+         * </pre>
+         * 
+         * @param nodeName
+         * @param nodeattributes
+         * @return
+         */
+        public Collector collect(String nodeName, String nodeattributes) {
+
+            String[] splitCol = nodeattributes.split(",");
+            nodeName = adjustNodePath(nodeName);
+
+            for (String attProp : splitCol) {
+                attProp = attProp.trim();
                 String[] split = attProp.split(":");
-
-                List<Attrib> attrList = mParseAttr.get(elementName);
-                if (attrList == null) {
-                    attrList = new ArrayList<Attrib>(6);
-                    mParseAttr.put(elementName, attrList);
-                }
-                Attrib newAttr = new Attrib(split[0],
-                        split.length > 1 ? split[1] : split[0]);
-
-                addCollAtrib(attrList, newAttr);
+                if (!split[0].startsWith("@") && !split[0].startsWith(".")) mParseEl
+                        .put(adjustNodePath(split[0]),
+                                split.length > 1 ? split[1] : split[0]);
+                else collectAttribute(nodeName, attProp);
             }
+
             return this;
         }
 
-        private void addCollAtrib(List<Attrib> attrList, Attrib newAttr) {
+        private String adjustNodePath(String nodeName) {
+            return (nodeName.length() > 0 && !nodeName.startsWith("/") && !nodeName
+                    .startsWith(".")) ? "/" + nodeName : nodeName;
+        }
+
+        private Collector collectAttribute(String nodeName, String attProp) {
+
+            attProp = attProp.startsWith("@") ? attProp.substring(1) : attProp;
+            String[] split = attProp.split(":");
+
+            List<Attrib> attrList = mParseAttr.get(nodeName);
+            if (attrList == null) {
+                attrList = new ArrayList<Attrib>(6);
+                mParseAttr.put(nodeName, attrList);
+            }
+            Attrib newAttr = new Attrib(split[0], split.length > 1 ? split[1]
+                    : split[0]);
+
             for (Attrib attr : attrList) {
                 if (attr.mCollectAs.equalsIgnoreCase(newAttr.mCollectAs))
                     throw new IllegalArgumentException(String.format(
                             "Attribute '%s' is being collected multiple"
                                     + " times with same key", attr.mCollectAs));
             }
-            
+
             attrList.add(newAttr);
+            return this;
         }
 
-        private void processElement(String elePath, String eleName,
-                String value, Attributes atts) {
+        private void processElement(boolean start, String fullPath,
+                String elePath, String eleName, String value, Attributes atts) {
+
+            Log.d("XML",
+                    String.format(
+                            "Start: %s, fullPath: %s, elePath: %s, eleName: %s, value: %s, AttrsLength: %s",
+                            start, fullPath, elePath, eleName, value,
+                            atts != null ? atts.getLength() : "null"));
+
+            if (!fullPath.startsWith(mCollectorPath)) return;
 
             // new element collector or new path with attr collector is
             // starting...
-            if (atts != null
-                    && (mCollectorPath.equals(elePath + "/" + eleName) || (mCollectorPath
-                            .equals(elePath) && mParseAttr.containsKey(eleName)))) {
-                if (mCurrentCV == null || mCurrentCV.size() > 0) {
-                    mCurrentCV = new ContentValues(6);
-                    mContents.add(mCurrentCV);
-                }
+            if (start && mCollectorPath.equals(fullPath)) {
+                mCurrentCV = new ContentValues(6);
+                mContents.add(mCurrentCV);
             }
-
-            if (!elePath.contains(mCollectorPath)) return;
 
             mCurrentNode.mCVs.add(mCurrentCV);
 
-            String parentChildDiffPath = elePath.substring(mCollectorPath
-                    .length());
-            parentChildDiffPath = parentChildDiffPath.length() > 0 ? parentChildDiffPath
-                    + "/"
-                    : parentChildDiffPath;
+            String childDiffPath = fullPath.substring(mCollectorPath.length());
 
             // parse element
-            String collectEleAs = mParseEl.get(parentChildDiffPath + eleName);
+            String collectEleAs = mParseEl.get(childDiffPath);
             if (value != null && collectEleAs != null) {
                 mCurrentCV.put(collectEleAs, value);
             }
 
             // parse attribute
-            List<Attrib> attrList = mParseAttr.get(eleName);
+            List<Attrib> attrList = mParseAttr.get(childDiffPath);
             if (atts == null || attrList == null) return;
 
             for (Attrib attr : attrList) {
-                if (attr.mKey.startsWith(".") || false) {
-                    mCurrentCV.put(attr.mCollectAs,
-                            mCurrentNode.getAncestorValue(attr.mKey));
-                } else {
-                    mCurrentCV.put(attr.mCollectAs, atts.getValue(attr.mKey));
-                }
+                String attrVal = null;
+
+                if (attr.mKey.startsWith(".")) attrVal = mCurrentNode
+                        .getAncestorValue(attr.mKey);
+                else attrVal = atts.getValue(attr.mKey);
+
+                mCurrentCV.put(attr.mCollectAs, attrVal);
             }
         }
     }

@@ -77,8 +77,8 @@ This provides *very* cool API for converting XML into DB data.
     XmlToCVHandler handler = new XmlToCVHandler();
     XmlToCVHandler.Collector dataCol = handler
             .addCollector("/node/path")
-            .collect("nodename1, nodename2:collect_node_as")
-            .collectAttributes("nodename", "attr1, attr2, attr3:collect_attr_as");
+            .collect("nodename1, nodename2:collect_node_as, @nodeAttr:na, @nodeAttr2")
+            .collect("nodename", "@attr1, @attr2, @attr3:collect_attr_as");
 
     Xml.parse(xmlStream, Xml.Encoding.UTF_8, handler);
     List<ContentValues> cvListData = dataCol.getData(); // You are done !!!.
