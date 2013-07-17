@@ -92,6 +92,9 @@ You can use XmlToCVHandler and DataStore API together to easily convert XML to d
 ##Developed By
 Raj Chukkapalli
 
+##Download
+Latest release is available [here](https://github.com/rchukka/trantil/releases).
+
 ##License
 	Copyright 2013 Raj Chukkapalli
 	
