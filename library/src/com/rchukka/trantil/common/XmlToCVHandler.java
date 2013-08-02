@@ -9,9 +9,7 @@ import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
 
-import com.rchukka.trantil.content.type.Column;
 import com.rchukka.trantil.content.type.DataType;
-import com.rchukka.trantil.content.type.Table;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,6 +61,7 @@ public class XmlToCVHandler extends DefaultHandler {
     private List<Collector> mCollectors  = new ArrayList<Collector>(2);
     private String          mCurrentPath = "";
     private Node            mCurrentNode = new Node();
+    private HashMap<String, CollectAs>        mCollectAsIndex = new HashMap<String, CollectAs>(8);
 
     public static List<ContentValues> parse(InputStream stream, Class klass) throws IOException, SAXException{
         XmlToCVHandler handler = new XmlToCVHandler();
@@ -182,12 +181,12 @@ public class XmlToCVHandler extends DefaultHandler {
         private HashMap<String, Index>        mNSIndex;
         
         final class Index{
-            private HashMap<String, String>       mParseEl;
+            private HashMap<String, CollectAs>       mParseEl;
             private HashMap<String, List<Attrib>> mParseAttr;
             String namespace;
             
             Index(String namespace){
-                mParseEl = new HashMap<String, String>(3);
+                mParseEl = new HashMap<String, CollectAs>(3);
                 mParseAttr = new HashMap<String, List<Attrib>>(5);
                 this.namespace  = namespace;
             }
@@ -296,12 +295,22 @@ public class XmlToCVHandler extends DefaultHandler {
                 String[] col = attProp.split(COLLECT_AS_SEPR);
                 
                 if (!col[0].startsWith("@") && !col[0].startsWith(".")){
-                    getNSIndex(namespaceurl).mParseEl.put(adjustNodePath(col[0]),
-                            col.length > 1 ? col[1] : col[0]);
+                    getNSIndex(namespaceurl).mParseEl.put(adjustNodePath(col[0]), new CollectAs(
+                            col.length > 1 ? col[1] : col[0]));
                 }else{
                     collectAttribute(namespaceurl, nodeName, attProp);
                 }
             }
+            
+            return this;
+        }
+        
+        public Collector addConverter(String forValue, TypeConverter converter){
+            CollectAs col = mCollectAsIndex.get(forValue);
+            if(col != null){
+                col.setConverter(converter);
+            }
+            
             return this;
         }
 
@@ -327,10 +336,10 @@ public class XmlToCVHandler extends DefaultHandler {
             }
             
             Attrib newAttr = new Attrib(split[0], split.length > 1 ? split[1]
-                    : split[0]);
+                    : split[0], false);
 
             for (Attrib attr : attrList) {
-                if (attr.mCollectAs.equalsIgnoreCase(newAttr.mCollectAs))
+                if (attr.mCollectAs.mCollectAs.equalsIgnoreCase(newAttr.mCollectAs.mCollectAs))
                     throw new IllegalArgumentException(String.format(
                             "Attribute '%s' is being collected multiple"
                                     + " times with same key", attr.mCollectAs));
@@ -366,16 +375,17 @@ public class XmlToCVHandler extends DefaultHandler {
             Index nsIndex = getNSIndex(nameSpace);
             
             // parse element
-            String collectEleAs = nsIndex.mParseEl.get(childDiffPath);
+            CollectAs collectEleAs = nsIndex.mParseEl.get(childDiffPath);
             if (value != null && collectEleAs != null) {
                 
                 if(Util.DEBUG)
                     Log.d("XML",
                         String.format(
                                 "Collecting %s as %s",
-                                value, collectEleAs));
+                                value, collectEleAs.mCollectAs));
                 
-                mCurrentCV.put(collectEleAs, value);
+                collectValue(collectEleAs, value);
+                //mCurrentCV.put(collectEleAs.mCollectAs, value);
             }
 
             // parse attribute
@@ -395,7 +405,17 @@ public class XmlToCVHandler extends DefaultHandler {
                                 "Collecting %s as %s",
                                 attrVal, attr.mCollectAs));
 
-                mCurrentCV.put(attr.mCollectAs, attrVal);
+                collectValue(attr.mCollectAs, attrVal);
+                //mCurrentCV.put(attr.mCollectAs.mCollectAs, attrVal);
+            }
+        }
+        
+        private void collectValue(CollectAs col, String value){
+            if(col.mConvert){
+                String newValue = col.getConverter().convert(col.mCollectAs, value);
+                mCurrentCV.put(col.mCollectAs, newValue);
+            }else{
+                mCurrentCV.put(col.mCollectAs, value);
             }
         }
     }
@@ -436,11 +456,40 @@ public class XmlToCVHandler extends DefaultHandler {
 
     private class Attrib {
         String mKey;
-        String mCollectAs;
+        CollectAs mCollectAs;
 
-        Attrib(String key, String collectAs) {
+        Attrib(String key, String collectAs, boolean convert) {
             mKey = key;
-            mCollectAs = collectAs.replace(".", "");
+            mCollectAs = new CollectAs(collectAs, convert);
         }
+    }
+    
+    private class CollectAs{
+        String mCollectAs;
+        boolean mConvert = false;
+        private TypeConverter mTypeConverter;
+        
+        public CollectAs(String collectAs){
+            mCollectAs = collectAs.replace(".", "");
+            mCollectAsIndex.put(mCollectAs, this);
+        }
+        
+        public CollectAs(String collectAs, boolean convert){
+            mCollectAs = collectAs.replace(".", "");
+            this.mConvert = convert;
+        }
+        
+        public void setConverter(TypeConverter typeConverter){
+            mConvert = true;
+            mTypeConverter = typeConverter;
+        }
+        
+        public TypeConverter getConverter(){
+            return mTypeConverter;
+        }
+    }
+    
+    public static abstract class TypeConverter{
+        public abstract String convert(String name, String value);
     }
 }

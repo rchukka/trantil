@@ -1,7 +1,9 @@
 package com.rchukka.trantil.test.unit;
 
 import java.io.InputStream;
+import java.text.SimpleDateFormat;
 import java.util.List;
+import java.util.Locale;
 
 import com.rchukka.trantil.common.XNode;
 import com.rchukka.trantil.common.XPath;
@@ -43,7 +45,7 @@ public class FusedTest extends InstrumentationTestCase {
         AssetManager am = getInstrumentation().getContext().getResources()
                 .getAssets();
         InputStream resStream = null;
-        resStream = am.open("atom.xml");
+        resStream = am.open("atom-small.xml");
 
         @Table(version = 0)
         @XPath(path= "/rss/channel")
@@ -78,7 +80,7 @@ public class FusedTest extends InstrumentationTestCase {
 
         @Table(version = 0)
         @XPath(path = "/rss/channel/item")
-        final class ChannelItem {
+        final class ChannelItem{
 
             @Column private String               title;
             @Column(isKey = true) private long   channelId;
@@ -125,11 +127,28 @@ public class FusedTest extends InstrumentationTestCase {
             }
         }
 
+        XmlToCVHandler.TypeConverter dateConverter = new XmlToCVHandler.TypeConverter() {
+            @Override
+            public String convert(String name, String value) {
+                long time = 0;
+                try {
+                    SimpleDateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.ENGLISH);
+                    time = format.parse(value).getTime();
+                    time = time/1000;
+                } catch (java.text.ParseException e) {
+                    e.printStackTrace();
+                }
+                return time + "";
+            }
+        };
+        
         XmlToCVHandler handler = new XmlToCVHandler();
         XmlToCVHandler.Collector channelCol = handler
-                .addCollector(Channel.class);
+                .addCollector(Channel.class)
+                .addConverter("lastBuildDate", dateConverter);
         XmlToCVHandler.Collector itemCol = handler
-                .addCollector(ChannelItem.class);
+                .addCollector(ChannelItem.class)
+                .addConverter("pubDate", dateConverter);
         handler.parse(resStream);
         
         List<ContentValues> channel = channelCol.getData();
@@ -141,6 +160,7 @@ public class FusedTest extends InstrumentationTestCase {
         assertEquals("StarTalk Radio Show by Neil deGrasse Tyson Shows",
                 channel.get(0).getAsString("title"));
         assertEquals("http://www.startalkradio.net/feed/shows/", channel.get(0).getAsString("atomLink"));
+        assertEquals("1374027956", channel.get(0).getAsString("lastBuildDate"));
         
         assertEquals(true, items.size() > 8);
         assertEquals("Cosmic Queries: Planet Earth",
