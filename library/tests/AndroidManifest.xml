@@ -39,6 +39,7 @@
         <activity android:name="com.rchukka.trantil.test.datastore.DataStoreActivityB" />
         <activity android:name="com.rchukka.trantil.test.datastore.DataStoreActivityC" />
         <activity android:name="com.rchukka.trantil.test.datastore.DataStoreNotification" />
+        <activity android:name="com.rchukka.trantil.test.common.PerformanceActivity" />
     </application>
 
 </manifest>

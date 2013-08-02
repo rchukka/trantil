@@ -10,5 +10,4 @@ import java.lang.annotation.Target;
 public @interface Table {
     int version();
     String name() default "";
-    String xPath() default "";
 }

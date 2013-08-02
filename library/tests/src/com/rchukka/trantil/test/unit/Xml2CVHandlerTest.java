@@ -6,12 +6,16 @@ import java.util.List;
 import com.rchukka.trantil.common.XNode;
 import com.rchukka.trantil.common.XPath;
 import com.rchukka.trantil.common.XmlToCVHandler;
+import com.rchukka.trantil.content.CursorColumnMap;
 import com.rchukka.trantil.content.type.Column;
 import com.rchukka.trantil.content.type.ColumnInt;
 import com.rchukka.trantil.content.type.Table;
 
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.res.AssetManager;
+import android.database.Cursor;
+import android.net.Uri;
 import android.test.InstrumentationTestCase;
 import android.util.Log;
 import android.util.Xml;
@@ -43,7 +47,7 @@ public class Xml2CVHandlerTest extends InstrumentationTestCase {
 
         XmlToCVHandler.Collector booksCol = handler
                 .addCollector("/response/book")
-                .collect("@bookid:id, @name, @pubDate, comment")
+                .collect("@bookid=id, @name, @pubDate, comment")
                 .collect("comment", "@userid");
 
         Xml.parse(resStream, Xml.Encoding.UTF_8, handler);
@@ -83,7 +87,7 @@ public class Xml2CVHandlerTest extends InstrumentationTestCase {
         XmlToCVHandler.Collector booksCol = handler.addCollector(Book.class);
         XmlToCVHandler.Collector statusCol = handler
                 .addCollector("/response/status")
-                .collect("errorcode:code,errormsg")
+                .collect("errorcode=code,errormsg")
                 .collect("errorcode", "@critical");
         
         handler.parse(resStream);
@@ -112,7 +116,8 @@ public class Xml2CVHandlerTest extends InstrumentationTestCase {
         InputStream resStream = null;
         resStream = am.open("books.xml");
 
-        @Table(version = 0, xPath = "/response/status")
+        @Table(version = 0)
+        @XPath(path="/response/status")
         class Status {
             @Column private String errorcode;
             @Column private String errormsg;
@@ -127,10 +132,54 @@ public class Xml2CVHandlerTest extends InstrumentationTestCase {
         assertEquals("0", status.get(0).getAsString("errorcode"));
         assertEquals("No Error", status.get(0).getAsString("errormsg"));
     }
-
-    private void _testBooksXml(String fileName) throws Exception {
+    
+    public void testNameSpace() throws Exception {
 
         AssetManager am = getInstrumentation().getContext().getResources()
+                .getAssets();
+        InputStream resStream = null;
+        resStream = am.open("atom-small.xml");
+        Uri atom = Uri.parse("http://www.w3.org/2005/Atom");
+        Uri itunes = Uri.parse("http://www.itunes.com/dtds/podcast-1.0.dtd");
+
+        XmlToCVHandler handler = new XmlToCVHandler();
+        XmlToCVHandler.Collector rssCol = handler
+                .addCollector("/rss/channel").collect("link")
+                .collect(atom, "link", "@href=atomlink")
+                .collect(itunes, "image", "@href=image");
+        
+        XmlToCVHandler.Collector itemCol = handler
+                .addCollector("/rss/channel/item").collect("link, title")
+                .collect(itunes, "subtitle");
+
+        Xml.parse(resStream, Xml.Encoding.UTF_8, handler);
+        resStream.close();
+        List<ContentValues> rss = rssCol.getData();
+        List<ContentValues> items = itemCol.getData();
+
+        assertEquals(true, rss.size() > 0);
+        assertEquals(3, rss.get(0).size());
+        assertEquals("http://www.startalkradio.net/feed/shows/", rss.get(0).getAsString("atomlink"));
+        assertEquals("http://www.startalkradio.net", rss.get(0).getAsString("link"));
+        assertEquals("http://www.startalkradio.net/img/feed_image_lg.jpg", rss.get(0).getAsString("image"));
+        
+        assertEquals(true, items.size() > 6);
+        assertEquals(3, items.get(0).size());
+        assertEquals("http://www.podtrac.com/pts/redirect.mp3/media.startalkradio.net/uploads/shows/STR-S04E18-2013-07-07-startalk-live-storms-of-our-century-part-2.mp3", items.get(1).getAsString("link"));
+        assertEquals("StarTalk Live! Storms of Our Century (Part 2)", items.get(1).getAsString("title"));
+        assertEquals("The climate heats up in the Bell House when Neil deGrasse Tyson and the StarTalk Live crew, including Questlove and Dr. Adam Sobel, look at the causes, politics and science of climate change.", items.get(1).getAsString("subtitle"));
+
+    }
+    
+    public void _testBooksXml(String fileName) throws Exception {
+        _testBooksXml(fileName, null);
+    }
+    
+    public void _testBooksXml(String fileName, Context context) throws Exception {
+        
+        Context app = context == null ? getInstrumentation().getContext() : context;
+
+        AssetManager am = app.getResources()
                 .getAssets();
         InputStream resStream = null;
         resStream = am.open(fileName);
@@ -138,10 +187,10 @@ public class Xml2CVHandlerTest extends InstrumentationTestCase {
         XmlToCVHandler handler = new XmlToCVHandler();
         XmlToCVHandler.Collector statusCol = handler
                 .addCollector("/response/status")
-                .collect("errorcode:code,errormsg")
+                .collect("errorcode=code,errormsg")
                 .collect("errorcode", "@critical");
         XmlToCVHandler.Collector booksCol = handler.addCollector(
-                "/response/book").collect("@bookid:id,@name,@pubDate");
+                "/response/book").collect("@bookid=id,@name,@pubDate");
 
         Xml.parse(resStream, Xml.Encoding.UTF_8, handler);
         resStream.close();
@@ -169,10 +218,16 @@ public class Xml2CVHandlerTest extends InstrumentationTestCase {
     public void testFolderXml() throws Exception {
         _testFolderXml("folder.xml");
     }
+    
+    public void _testFolderXml(String fileName) throws Exception {
+        _testFolderXml(fileName, null);
+    }
 
-    private void _testFolderXml(String fileName) throws Exception {
+    public void _testFolderXml(String fileName, Context context) throws Exception {
 
-        AssetManager am = getInstrumentation().getContext().getResources()
+        Context app = context == null ? getInstrumentation().getContext() : context;
+
+        AssetManager am = app.getResources()
                 .getAssets();
         InputStream resStream = null;
 
@@ -184,7 +239,7 @@ public class Xml2CVHandlerTest extends InstrumentationTestCase {
 
         XmlToCVHandler.Collector cFiles = handler.addCollector(
                 "/response/folder/file").collect(
-                ".name:foldername, @name, @owner");
+                ".name=foldername, @name, @owner");
 
         Xml.parse(resStream, Xml.Encoding.UTF_8, handler);
         resStream.close();
@@ -252,7 +307,7 @@ public class Xml2CVHandlerTest extends InstrumentationTestCase {
         try {
             XmlToCVHandler.Collector cFiles = handler.addCollector(
                     "/response/folder").collect("file",
-                    ".name:foldername,@name,@owner");
+                    ".name=foldername,@name,@owner");
             Xml.parse(resStream, Xml.Encoding.UTF_8, handler);
             fail("Failed to notify that parent attribute is not being collected.");
         } catch (IllegalArgumentException expected) {
@@ -278,7 +333,7 @@ public class Xml2CVHandlerTest extends InstrumentationTestCase {
 
         if (avg > 200 && avg < 250) fail("Processing is slow." + avg);
 
-        // if (avg > 150 && avg < 200) fail("Processing is not fast." + avg);
+        if (avg > 100 && avg < 200) fail("Processing is not fast." + avg);
 
         Log.i("Xml2CVHandlerTest",
                 "testPerformanceBooks() completed with avg time of " + avg
@@ -302,7 +357,7 @@ public class Xml2CVHandlerTest extends InstrumentationTestCase {
 
         if (avg > 200 && avg < 250) fail("Processing is slow." + avg);
 
-        if (avg > 150 && avg < 200) fail("Processing is not fast." + avg);
+        if (avg > 100 && avg < 200) fail("Processing is not fast." + avg);
 
         Log.i("Xml2CVHandlerTest",
                 "testPerformanceFolder() completed with avg time of " + avg
